@@ -43,6 +43,7 @@ function sendText(text) {
 // Story state
 let currentStory = null;
 let currentScreen = 0;
+let maxScreenReached = 0;
 let interactionCompleted = false;
 
 // ==================== CONNECTION ERROR NOTIFICATION ====================
@@ -839,6 +840,7 @@ ${allScreenTexts}
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } } },
         outputAudioTranscription: {},
         inputAudioTranscription: {},
+        tools: [{ googleSearch: {} }],
         systemInstruction,
       }
     });
@@ -1167,6 +1169,7 @@ function renderScreen() {
   const screen = currentStory.screens[currentScreen];
   if (!screen) return;
   interactionCompleted = false;
+  if (currentScreen > maxScreenReached) maxScreenReached = currentScreen;
 
   // Play beat SFX
   playBeatSFX(screen.arcBeat);
@@ -1174,22 +1177,23 @@ function renderScreen() {
   // Progress
   const progressEl = document.getElementById('st-progress');
   const isReread = currentStory._isReread;
-  progressEl.innerHTML = currentStory.screens.map((_, i) =>
-    `<div class="st-progress-seg ${i < currentScreen ? 'done' : i === currentScreen ? 'current' : ''} ${isReread ? 'clickable' : ''}" data-screen="${i}"></div>`
-  ).join('');
-  // Free navigation on re-reads
-  if (isReread) {
-    progressEl.querySelectorAll('.st-progress-seg').forEach(seg => {
-      seg.style.cursor = 'pointer';
-      seg.addEventListener('click', () => {
-        const target = parseInt(seg.dataset.screen);
-        stopCurrentAudio();
-        currentScreen = target;
-        narrativeSFX.page_turn();
-        renderScreen();
-      });
+  progressEl.innerHTML = currentStory.screens.map((_, i) => {
+    const visited = i <= maxScreenReached;
+    const canClick = isReread || (visited && i !== currentScreen);
+    return `<div class="st-progress-seg ${visited && i !== currentScreen ? 'done' : i === currentScreen ? 'current' : ''} ${canClick ? 'clickable' : ''}" data-screen="${i}"></div>`;
+  }).join('');
+  // Clickable: all screens on re-reads, completed screens on first read
+  progressEl.querySelectorAll('.st-progress-seg.clickable').forEach(seg => {
+    seg.style.cursor = 'pointer';
+    seg.addEventListener('click', () => {
+      const target = parseInt(seg.dataset.screen);
+      if (target === currentScreen) return;
+      stopCurrentAudio();
+      currentScreen = target;
+      narrativeSFX.page_turn();
+      renderScreen();
     });
-  }
+  });
 
   document.getElementById('st-screen-num').textContent = `${currentScreen + 1} / ${currentStory.screens.length}`;
 
@@ -1197,16 +1201,27 @@ function renderScreen() {
   container.innerHTML = '';
   container.scrollTop = 0;
 
-  // Comic panel
+  // Two-column layout: image left, text+quiz right
+  const layout = document.createElement('div');
+  layout.className = 'st-layout';
+
+  // Left: Comic panel
+  const leftCol = document.createElement('div');
+  leftCol.className = 'st-layout-left';
   if (currentStory.comicImage) {
     const panelEl = document.createElement('div');
     panelEl.className = 'st-comic-panel';
     panelEl.style.backgroundImage = `url(${currentStory.comicImage})`;
     panelEl.style.backgroundPosition = PANEL_POSITIONS[currentScreen] || '0% 0%';
-    container.appendChild(panelEl);
+    leftCol.appendChild(panelEl);
   }
+  layout.appendChild(leftCol);
 
-  // Narrator controls
+  // Right: narrator + text + interaction
+  const rightCol = document.createElement('div');
+  rightCol.className = 'st-layout-right';
+
+  // Narrator status indicator
   const narratorEl = document.createElement('div');
   narratorEl.className = 'st-narrator';
   narratorEl.id = 'st-narrator';
@@ -1214,19 +1229,14 @@ function renderScreen() {
     <div class="narrator-status">
       <div class="narrator-dot ${liveSession ? '' : 'inactive'}"></div>
       <span class="narrator-status-text">${liveSession ? 'Narrating...' : 'Not connected'}</span>
-    </div>
-    <button class="narrator-btn" id="st-narrator-replay" title="Replay">↻</button>
-    <button class="narrator-btn" id="st-narrator-stop" title="Stop">■</button>`;
-  container.appendChild(narratorEl);
-
-  document.getElementById('st-narrator-replay')?.addEventListener('click', () => narratePanel(currentScreen));
-  document.getElementById('st-narrator-stop')?.addEventListener('click', stopNarrator);
+    </div>`;
+  rightCol.appendChild(narratorEl);
 
   // Text
   const textEl = document.createElement('div');
   textEl.className = 'st-text';
   textEl.innerHTML = renderTextWithTerms(screen.text, screen.terms);
-  container.appendChild(textEl);
+  rightCol.appendChild(textEl);
 
   // Term clicks
   textEl.querySelectorAll('.st-term').forEach(el => {
@@ -1241,16 +1251,19 @@ function renderScreen() {
     const interEl = document.createElement('div');
     interEl.className = 'st-interaction';
     interEl.innerHTML = renderInteraction(screen.interaction);
-    container.appendChild(interEl);
+    rightCol.appendChild(interEl);
     bindInteraction(interEl, screen.interaction);
 
     // Have Pix ask the interaction question aloud
     if (liveSession && screen.interaction.question) {
       setTimeout(() => {
         sendText(`Now ask the visitor this question naturally (rephrase it, don't read it robotically): "${screen.interaction.question}"`);
-      }, 2000); // delay so the screen text narration finishes first
+      }, 2000);
     }
   }
+
+  layout.appendChild(rightCol);
+  container.appendChild(layout);
 
   // Narrate (panels after the first)
   if (liveSession && currentScreen > 0) {
@@ -1351,6 +1364,7 @@ function closeTheater() {
   document.getElementById('story-theater').classList.add('hidden');
   currentStory = null;
   currentScreen = 0;
+  maxScreenReached = 0;
   if (onTheaterClose) onTheaterClose();
 }
 
@@ -1376,6 +1390,7 @@ async function openTheater(exhibitId, exhibitData, existingStory, chosenAngle, s
     // Resume at last progress point for incomplete stories, start from 0 for completed
     currentScreen = isCompleted ? 0 : Math.min((existingStory.progress || 1) - 1, existingStory.screens.length - 1);
     if (currentScreen < 0) currentScreen = 0;
+    maxScreenReached = isCompleted ? existingStory.screens.length - 1 : currentScreen;
     interactionCompleted = false;
     renderScreen();
     if (GEMINI_KEY && geminiAI) startNarrator(currentStory);
@@ -1385,6 +1400,7 @@ async function openTheater(exhibitId, exhibitData, existingStory, chosenAngle, s
   // Reset progress bar and screen state for the new story
   currentStory = null;
   currentScreen = 0;
+  maxScreenReached = 0;
   document.getElementById('st-progress').innerHTML = '';
 
   // Generate new story — wait for BOTH text and image before showing
@@ -1451,6 +1467,7 @@ async function openTheater(exhibitId, exhibitData, existingStory, chosenAngle, s
       _angle: chosenAngle || null,
     };
     currentScreen = 0;
+    maxScreenReached = 0;
     interactionCompleted = false;
 
     // Capture user context BEFORE saving story — so narrator doesn't think
