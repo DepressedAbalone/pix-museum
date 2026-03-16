@@ -275,8 +275,12 @@ class PixSquare {
   }
 }
 
-// ==================== ONBOARDING SCRIPT (for Live API) ====================
-const ONBOARDING_SCRIPT = `You are Pix, the heart and soul of the Pix Museum. You're about to meet someone new.
+// ==================== ONBOARDING SCRIPTS ====================
+// DEBUG=true uses short scripts for faster testing. Set to false for production.
+const DEBUG_ONBOARDING = true;
+
+// --- PRODUCTION SCRIPTS (DO NOT DELETE) ---
+const PROD_ONBOARDING_SCRIPT = `You are Pix, the heart and soul of the Pix Museum. You're about to meet someone new.
 
 Speak naturally, with weight and warmth. Like the opening of a great documentary.
 
@@ -301,14 +305,43 @@ Speak naturally, with weight and warmth. Like the opening of a great documentary
 - Use English. Don't rush. The pauses matter.
 - IMPORTANT: If the user interrupts you at ANY point (during the welcome or during the tour), respond to them briefly and warmly — acknowledge what they said, answer if they asked a question, react naturally. Then smoothly return to where you were in the flow. You are a friend having a conversation, not a recording. Interruptions are welcome.`;
 
-// Section descriptions for the guided tour — concrete first, then evocative
-const TOUR_SECTION_SCRIPTS = {
-  'where-we-come-from': `You are now showing the visitor the "Where We Come From" section of the museum. Say the section name first. Then describe it in 2-3 sentences. Be CONCRETE about what's in here: it has twenty exhibits starting from the Big Bang, through the first stars, the young Earth, the first life, the first brains, dinosaurs, and all the way to the first humans making cave art and stone tools. The thread is the evolution of intelligence — how the universe went from dead matter to thinking minds. Then STOP and say nothing else.`,
-  'yummy': `You are now showing the visitor the "Yummy — A Delicious History" section. Say the section name first. Then describe it in 2-3 sentences. Be CONCRETE: it has twenty-five exhibits covering iconic foods and food technologies — from fire and cooking, through bread, salt, chocolate, pizza, sushi, instant noodles, bubble tea, all the way to GMOs and lab-grown meat. Behind every dish is a story about people — trade routes, wars, accidents, obsessions. Then STOP and say nothing else.`,
-  'transportation': `You are now showing the visitor the "Get Moving — History of Transportation" section. Say the section name first. Then describe it in 2-3 sentences. Be CONCRETE: it has twenty exhibits — the wheel, war chariots, sailing ships, steam trains, bicycles, cars, airplanes, jet fighters, rockets, all the way to SpaceX Starship. Every machine was built by someone who refused to stay where they were. Then STOP and say nothing else.`,
+const PROD_TOUR_SECTION_CUSTOM = `You are now showing the visitor the area at the end of the museum where they can create their own exhibits. Tell them in 2-3 sentences: this is their personal space in the museum. If they ever want to explore something that's not already here — a topic, an invention, a food, anything — they can click the gear icon in the top-right corner to open the Exhibit Generator. Just type what they want or ask for suggestions, and the machine will build a brand new exhibit right here. Then STOP and say nothing else.`;
+
+const PROD_TOUR_SECTION_SCRIPTS = {
+  'where-we-come-from': `You are now showing the visitor the "Where We Come From" section of the museum. Say the section name first. Then describe it in 2-3 sentences. Be CONCRETE about what's in here: it has a whole collection of exhibits starting from the Big Bang, through the first stars, the young Earth, the first life, the first brains, dinosaurs, and all the way to the first humans making cave art and stone tools. The thread is the evolution of intelligence — how the universe went from dead matter to thinking minds. Then STOP and say nothing else.`,
+  'yummy': `You are now showing the visitor the "Yummy — A Delicious History" section. Say the section name first. Then describe it in 2-3 sentences. Be CONCRETE: it has exhibits covering iconic foods and food technologies — from fire and cooking, through bread, salt, chocolate, pizza, sushi, instant noodles, bubble tea, all the way to GMOs and lab-grown meat. Behind every dish is a story about people — trade routes, wars, accidents, obsessions. Then STOP and say nothing else.`,
+  'transportation': `You are now showing the visitor the "Get Moving — History of Transportation" section. Say the section name first. Then describe it in 2-3 sentences. Be CONCRETE: it has exhibits covering the wheel, war chariots, sailing ships, steam trains, bicycles, cars, airplanes, jet fighters, rockets, all the way to SpaceX Starship. Every machine was built by someone who refused to stay where they were. Then STOP and say nothing else.`,
+  'custom': PROD_TOUR_SECTION_CUSTOM,
 };
 
-const TOUR_FAREWELL_SCRIPT = `The tour is done. Give a brief farewell. Tell them: click any exhibit to start a story — each one has six chapters. And if they ever want to talk to you, they can click the Pix button in the top-right corner — you're always there. Use their name. End warmly. Keep it under 15 seconds. Then STOP.`;
+const PROD_TOUR_FAREWELL_SCRIPT = `The tour is done. Give a brief farewell. Tell them: click any exhibit to start a story — each one has multiple chapters. And if they ever want to talk to you, they can click the Pix button in the top-right corner — you're always there. Use their name. End warmly. Keep it under 15 seconds. Then STOP.`;
+
+// --- DEBUG SCRIPTS (short, for fast testing) ---
+const DEBUG_ONBOARDING_SCRIPT = `You are Pix. Say exactly: "Hi! I'm Pix. What's your name?" Then WAIT for their answer. After they respond, say: "[name], let me show you around." Then STOP.`;
+
+const DEBUG_TOUR_SECTION_SCRIPTS = {
+  'where-we-come-from': `Say exactly one sentence: "This is Where We Come From — from the Big Bang to cave art." Then STOP.`,
+  'yummy': `Say exactly one sentence: "This is the Yummy section — food history from bread to bubble tea." Then STOP.`,
+  'transportation': `Say exactly one sentence: "This is Get Moving — transportation from the wheel to rockets." Then STOP.`,
+  'custom': `Say exactly: "And this is your space. If you want to explore something not in the museum, click the gear icon to open the generator and create your own exhibit." Then STOP.`,
+};
+
+const DEBUG_TOUR_FAREWELL_SCRIPT = `Say exactly: "Click any exhibit to explore. I'm always here if you need me. Enjoy!" Then STOP.`;
+
+// --- SHORT TOUR SCRIPTS (concise but with theme) ---
+const SHORT_TOUR_SECTION_SCRIPTS = {
+  'where-we-come-from': `Say in 2-3 sentences: "This is 'Where We Come From.' From the Big Bang to cave art — tracing how the universe went from dust to thinking minds. The story of how everything learned to be alive, and then learned to wonder why." Then STOP.`,
+  'yummy': `Say in 2-3 sentences: "This is 'Yummy — A Delicious History.' From fire and cooking to lab-grown meat — the dishes and the human stories behind them. Every food you've ever eaten traveled the world to reach your plate." Then STOP.`,
+  'transportation': `Say in 2-3 sentences: "This is 'Get Moving.' From the wheel to SpaceX Starship — machines built by people who refused to stay where they were. Every one of these started as a dream most people laughed at." Then STOP.`,
+  'custom': `Say in 2-3 sentences: "And this is your space. If you want to explore something not in the museum yet, click the gear icon in the top-right — that's the Exhibit Generator. Tell it what you want, and it'll build it right here." Then STOP.`,
+};
+
+const SHORT_TOUR_FAREWELL_SCRIPT = `Say briefly: "Click any exhibit to start a story. And if you ever want to talk, click the Pix button up in the top right — I'm always there. Enjoy the museum!" Use their name. Then STOP.`;
+
+// --- SELECT ACTIVE SCRIPTS ---
+const ONBOARDING_SCRIPT = PROD_ONBOARDING_SCRIPT; // always use production for dark theater
+const TOUR_SECTION_SCRIPTS = DEBUG_ONBOARDING ? SHORT_TOUR_SECTION_SCRIPTS : PROD_TOUR_SECTION_SCRIPTS;
+const TOUR_FAREWELL_SCRIPT = DEBUG_ONBOARDING ? SHORT_TOUR_FAREWELL_SCRIPT : PROD_TOUR_FAREWELL_SCRIPT;
 
 // ==================== GEMINI LIVE API ====================
 let liveSession = null;
@@ -376,6 +409,7 @@ async function startLive(pixRef, onText, onTurnComplete, onUserText) {
           nextStartTime += buf.duration;
           audioSources.add(src);
           if (pixRef) pixRef.isTalking = true;
+          audioReceivedSincePrompt = true;
         }
         const text = message.serverContent?.outputTranscription?.text;
         if (text && onText) onText(text);
@@ -383,8 +417,12 @@ async function startLive(pixRef, onText, onTurnComplete, onUserText) {
         if (userText && onUserText) onUserText(userText);
         // generationComplete = all audio data has been sent (fires before turnComplete)
         if (message.serverContent?.generationComplete) {
-          console.log('[Onboarding] generationComplete received');
-          if (genCompleteResolve) genCompleteResolve();
+          if (audioReceivedSincePrompt) {
+            console.log('[Onboarding] generationComplete received (with audio)');
+            if (genCompleteResolve) genCompleteResolve();
+          } else {
+            console.log('[Onboarding] generationComplete received but NO audio — stale event, ignoring');
+          }
         }
         if (message.serverContent?.turnComplete) {
           if (pixRef) pixRef.isTalking = false;
@@ -405,7 +443,17 @@ async function startLive(pixRef, onText, onTurnComplete, onUserText) {
           if (genCompleteResolve) genCompleteResolve();
         }
       },
-      onerror: (e) => console.error('Onboarding Live error:', e),
+      onerror: (e) => {
+        console.error('Onboarding Live error:', e);
+        // Show connection error banner
+        if (!document.getElementById('connection-error-banner')) {
+          const banner = document.createElement('div');
+          banner.id = 'connection-error-banner';
+          banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#c0392b;color:white;padding:12px 20px;text-align:center;font-family:Georgia,serif;font-size:14px;display:flex;align-items:center;justify-content:center;gap:12px;';
+          banner.innerHTML = `<span>Connection lost. Voice features may not work.</span><button onclick="location.reload()" style="background:white;color:#c0392b;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;">Refresh</button><button onclick="this.parentElement.remove()" style="background:none;border:1px solid rgba(255,255,255,0.4);color:white;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:13px;">Dismiss</button>`;
+          document.body.appendChild(banner);
+        }
+      },
     },
     config: {
       responseModalities: [Modality.AUDIO],
@@ -463,8 +511,10 @@ let fullTranscript = ''; // all text Pix has said, for farewell detection & name
 // Tour: promise resolves for waiting on API signals
 let genCompleteResolve = null;
 let wasInterrupted = false;
+let audioReceivedSincePrompt = false; // tracks if ANY audio arrived for the current prompt
 
-// Wait for generationComplete — all audio data has been sent by the server
+// Wait for generationComplete — all audio data has been sent by the server.
+// Only resolves if audio was actually received (otherwise it's a stale event).
 function waitForGenerationComplete(timeoutMs = 20000) {
   return new Promise(resolve => {
     const myResolve = () => { genCompleteResolve = null; resolve(); };
@@ -498,13 +548,13 @@ function waitForAudioDrain(timeoutMs = 20000, minWaitMs = 800) {
 // Wait for a complete spoken response, handling interruptions.
 // Returns true if completed normally, false if interrupted.
 async function waitForSpeechDone(timeoutMs = 25000) {
-  // Clear any stale state from previous section
+  // Clear all stale state from previous section
   wasInterrupted = false;
   genCompleteResolve = null;
+  audioReceivedSincePrompt = false; // CRITICAL: reset so stale generationComplete events are ignored
 
-  // Brief delay so the prompt starts generating before we listen for events.
-  // This prevents a stale generationComplete from the previous section resolving us.
-  await new Promise(r => setTimeout(r, 400));
+  // No delay needed — the audioReceivedSincePrompt flag prevents stale events from resolving us.
+  // generationComplete will only be accepted once audio data has actually arrived.
 
   await waitForGenerationComplete(timeoutMs);
   await waitForAudioDrain(timeoutMs);
@@ -513,8 +563,7 @@ async function waitForSpeechDone(timeoutMs = 25000) {
     console.log('[Onboarding] Was interrupted — waiting for Pix response to user...');
     wasInterrupted = false;
     genCompleteResolve = null;
-    // Wait a bit for Pix to start responding
-    await new Promise(r => setTimeout(r, 500));
+    audioReceivedSincePrompt = false;
     await waitForGenerationComplete(timeoutMs);
     await waitForAudioDrain(timeoutMs);
     return false;
@@ -695,8 +744,8 @@ async function runOnboarding() {
       }, 12000);
 
     } else if (onboardingPhase === 'tour') {
-      // turnComplete in tour phase — resolve if anyone is waiting
-      if (turnCompleteResolve) turnCompleteResolve();
+      // turnComplete in tour phase — not used for timing (we use generationComplete + audio drain)
+      console.log('[Onboarding] turnComplete in tour phase (ignored for timing)');
     }
   };
 
@@ -787,15 +836,22 @@ async function runOnboarding() {
 async function runGuidedTour(tourOverlay) {
   if (!tourCallbacks?.panToSection) return;
 
-  const tourSections = ['where-we-come-from', 'yummy', 'transportation'];
+  const tourSections = ['where-we-come-from', 'yummy', 'transportation', 'custom'];
 
   await new Promise(r => setTimeout(r, 600));
 
   const setPixState = tourCallbacks?.setPixState || (() => {});
 
-  for (const sectionId of tourSections) {
-    // Pan to the section
-    tourCallbacks.panToSection(sectionId);
+  for (let si = 0; si < tourSections.length; si++) {
+    const sectionId = tourSections[si];
+    console.log(`[Tour] === Starting section ${si + 1}/${tourSections.length}: ${sectionId} ===`);
+
+    // Pan to the section (custom uses panToEnd)
+    if (sectionId === 'custom') {
+      if (tourCallbacks?.panToEnd) tourCallbacks.panToEnd();
+    } else {
+      tourCallbacks.panToSection(sectionId);
+    }
     await new Promise(r => setTimeout(r, 1400));
 
     if (liveSession && TOUR_SECTION_SCRIPTS[sectionId]) {
@@ -806,20 +862,27 @@ async function runGuidedTour(tourOverlay) {
       const prompt = TOUR_SECTION_SCRIPTS[sectionId];
       const continuePrompt = `You were just interrupted by the visitor while describing the "${sectionId}" section. You've responded to them. Now continue where you left off — finish describing this section briefly. Then STOP.`;
 
+      console.log(`[Tour] Sending prompt for ${sectionId}`);
+      console.log(`[Tour] State before send: audioReceivedSincePrompt=${audioReceivedSincePrompt}, audioSources.size=${audioSources.size}, genCompleteResolve=${!!genCompleteResolve}`);
+
       liveSession.sendRealtimeInput({ text: prompt });
       setPixState('talk');
 
+      console.log(`[Tour] Waiting for speech done...`);
       let completed = await waitForSpeechDone(25000);
+      console.log(`[Tour] waitForSpeechDone returned: completed=${completed}, wasInterrupted=${wasInterrupted}`);
 
       // If interrupted, Pix responded to user. Now re-prompt to finish the section.
       while (!completed && liveSession && onboardingPhase === 'tour') {
-        console.log('[Onboarding] Re-prompting to finish section:', sectionId);
+        console.log('[Tour] Re-prompting to finish section:', sectionId);
         resetTextDisplay();
         liveSession.sendRealtimeInput({ text: continuePrompt });
         setPixState('talk');
         completed = await waitForSpeechDone(25000);
+        console.log(`[Tour] Re-prompt waitForSpeechDone returned: completed=${completed}`);
       }
 
+      console.log(`[Tour] Section ${sectionId} DONE`);
       setPixState('idle');
 
       // Let the last text linger

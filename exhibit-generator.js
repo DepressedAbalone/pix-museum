@@ -123,7 +123,7 @@ function buildContext() {
 function injectUI() {
   if (document.getElementById('gen-machine')) return;
 
-  const MW = 340, MH = 520; // machine dimensions
+  const MW = 400, MH = 580; // machine dimensions
 
   const style = document.createElement('style');
   style.textContent = `
@@ -134,7 +134,7 @@ function injectUI() {
     }
 
     #gen-machine {
-      position: fixed; bottom: 20px; left: 60px; z-index: 50;
+      position: fixed; top: 60px; right: 12px; z-index: 50;
       width: ${MW}px; height: ${MH}px;
       transition: opacity 0.25s, transform 0.25s;
     }
@@ -149,10 +149,10 @@ function injectUI() {
     /* Screen (embedded in machine) — overlaid on canvas */
     #gen-screen {
       position: absolute; top: 96px; left: 50px;
-      width: ${MW - 100}px; height: 186px;
+      width: ${MW - 100}px; height: 220px;
       background: #040a12; border: 2px solid #1a3050;
       border-radius: 4px; overflow-y: auto;
-      font-family: 'Courier New', monospace; font-size: 11px;
+      font-family: 'Courier New', monospace; font-size: 13px;
       color: #6a9aca; line-height: 1.5; padding: 8px 10px;
       box-shadow: inset 0 0 20px rgba(0,0,0,0.5), 0 0 4px rgba(74,154,255,0.1);
     }
@@ -169,23 +169,23 @@ function injectUI() {
       display: block; width: 100%; text-align: left;
       padding: 6px 8px; margin-bottom: 3px;
       background: rgba(74,154,255,0.06); border: 1px solid rgba(74,154,255,0.15);
-      color: #8abaea; font-size: 10px; font-family: 'Courier New', monospace;
+      color: #8abaea; font-size: 12px; font-family: 'Courier New', monospace;
       cursor: pointer; border-radius: 2px; transition: all 0.15s;
     }
     .gen-idea:hover { background: rgba(74,154,255,0.12); border-color: #4a9aff; }
     .gen-idea-title { font-weight: 700; color: #4a9aff; }
-    .gen-idea-desc { color: #5a7a9a; font-size: 9px; margin-top: 1px; }
+    .gen-idea-desc { color: #5a7a9a; font-size: 11px; margin-top: 1px; }
 
     /* Input slot (embedded in machine) */
     #gen-input-slot {
-      position: absolute; top: 296px; left: 50px;
+      position: absolute; top: 330px; left: 50px;
       width: ${MW - 100}px; height: 26px;
       display: flex; gap: 4px;
     }
     #gen-input {
       flex: 1; padding: 4px 8px;
       background: #0a1520; border: 2px solid #1a3050; border-radius: 2px;
-      color: #8abaea; font-family: 'Courier New', monospace; font-size: 11px;
+      color: #8abaea; font-family: 'Courier New', monospace; font-size: 13px;
       outline: none;
     }
     #gen-input:focus { border-color: #2a5a8a; box-shadow: 0 0 6px rgba(74,154,255,0.2); }
@@ -198,13 +198,13 @@ function injectUI() {
 
     /* Buttons (positioned over canvas-drawn button shapes) */
     #gen-btn-ideas {
-      position: absolute; top: 366px; left: 46px;
+      position: absolute; top: 400px; left: 46px;
       width: ${(MW - 92 - 12) / 2}px; height: 42px;
       background: transparent; border: none; cursor: pointer;
       color: transparent; font-size: 0;
     }
     #gen-btn-build {
-      position: absolute; top: 366px; right: 46px;
+      position: absolute; top: 400px; right: 46px;
       width: ${(MW - 92 - 12) / 2}px; height: 42px;
       background: transparent; border: none; cursor: pointer;
       color: transparent; font-size: 0;
@@ -275,6 +275,34 @@ function injectUI() {
 
   document.body.appendChild(machine);
 
+  // Draggable — drag by the top area (nameplate/funnel)
+  let isDragging = false, dragStartX = 0, dragStartY = 0, machineStartX = 0, machineStartY = 0;
+  canvas.style.pointerEvents = 'auto';
+  canvas.style.cursor = 'grab';
+  canvas.addEventListener('mousedown', (e) => {
+    const rect = machine.getBoundingClientRect();
+    if (e.clientY - rect.top > 90) return; // only drag from top 90px
+    isDragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    machineStartX = machine.offsetLeft;
+    machineStartY = machine.offsetTop;
+    canvas.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    machine.style.left = (machineStartX + e.clientX - dragStartX) + 'px';
+    machine.style.top = (machineStartY + e.clientY - dragStartY) + 'px';
+    machine.style.bottom = 'auto';
+  });
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      canvas.style.cursor = 'grab';
+    }
+  });
+
   // Draw the machine
   drawMachine(canvas, false, false, false);
 
@@ -305,7 +333,7 @@ function drawMachine(canvas, blue, green, orange) {
   ctx.scale(s, s);
   machineFrame++;
 
-  const W = 340, H = 520;
+  const W = 400, H = 580;
   const cx = W / 2;
 
   // === FUNNEL ON TOP (like the pixel art version) ===
@@ -335,7 +363,7 @@ function drawMachine(canvas, blue, green, orange) {
   }
 
   // === MAIN BODY — boxy iron housing ===
-  const bodyTop = 48, bodyBot = 420;
+  const bodyTop = 48, bodyBot = 455;
   const bodyGrad = ctx.createLinearGradient(0, bodyTop, 0, bodyBot);
   bodyGrad.addColorStop(0, '#5a5854');
   bodyGrad.addColorStop(0.1, '#6a6864');
@@ -408,25 +436,25 @@ function drawMachine(canvas, blue, green, orange) {
 
   // === SCREEN — recessed viewport ===
   ctx.fillStyle = '#3a3020';
-  roundRect(ctx, 46, 92, W - 92, 194, 4);
+  roundRect(ctx, 46, 92, W - 92, 228, 4);
   ctx.fill();
   ctx.fillStyle = '#0a0e14';
-  roundRect(ctx, 50, 96, W - 100, 186, 2);
+  roundRect(ctx, 50, 96, W - 100, 220, 2);
   ctx.fill();
   ctx.fillStyle = 'rgba(100,160,255,0.02)';
-  roundRect(ctx, 50, 96, W - 100, 90, 2);
+  roundRect(ctx, 50, 96, W - 100, 110, 2);
   ctx.fill();
 
   // === INPUT SLOT ===
   ctx.fillStyle = '#3a3020';
-  roundRect(ctx, 46, 292, W - 92, 34, 2);
+  roundRect(ctx, 46, 326, W - 92, 34, 2);
   ctx.fill();
   ctx.fillStyle = '#0a0e14';
-  roundRect(ctx, 50, 296, W - 100, 26, 1);
+  roundRect(ctx, 50, 330, W - 100, 26, 1);
   ctx.fill();
 
   // === STATUS LIGHTS ===
-  const ly = 340;
+  const ly = 374;
   const lamps = [
     { x: cx - 50, color: blue ? '#4a9aff' : '#1a2030', on: blue, label: 'IDEA' },
     { x: cx, color: green ? '#4aff6a' : '#1a3020', on: green, label: 'READY' },
@@ -454,13 +482,13 @@ function drawMachine(canvas, blue, green, orange) {
   ctx.textAlign = 'left';
 
   // === BUTTONS — chunky mechanical ===
-  const btnY = 366, btnH = 42, btnGap = 12;
+  const btnY = 400, btnH = 42, btnGap = 12;
   const btnW = (W - 92 - btnGap) / 2;
   drawMechButton(ctx, 46, btnY, btnW, btnH, blue, '#4a9aff', '#1a2a3a', 'IDEAS');
   drawMechButton(ctx, 46 + btnW + btnGap, btnY, btnW, btnH, green, green ? '#4aff6a' : '#2a3a2a', '#1a3a1a', 'BUILD');
 
   // === CONVEYOR BELT (bottom, like pixel art version) ===
-  const convY = 425;
+  const convY = 460;
   // Belt track
   ctx.fillStyle = '#3a3834';
   ctx.fillRect(50, convY, W - 100, 12);
@@ -488,7 +516,7 @@ function drawMachine(canvas, blue, green, orange) {
   });
 
   // === BOTTOM FEET ===
-  [[50, 445], [W - 70, 445]].forEach(([fx, fy]) => {
+  [[50, 480], [W - 70, 480]].forEach(([fx, fy]) => {
     ctx.fillStyle = '#3a3834';
     roundRect(ctx, fx, fy, 20, 40, 2); ctx.fill();
     ctx.fillStyle = '#4a4844';
@@ -496,7 +524,7 @@ function drawMachine(canvas, blue, green, orange) {
   });
 
   // === PIPES from body sides to bottom ===
-  [[38, 380, 55, 450], [W - 38, 380, W - 55, 450]].forEach(([x1, y1, x2, y2]) => {
+  [[38, 415, 55, 485], [W - 38, 415, W - 55, 485]].forEach(([x1, y1, x2, y2]) => {
     ctx.strokeStyle = '#5a5854'; ctx.lineWidth = 5;
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(x1, y2, x2, y2); ctx.stroke();
     ctx.strokeStyle = '#7a7874'; ctx.lineWidth = 2;
@@ -731,9 +759,9 @@ Rules:
 Output as JSON array.`,
       config: {
         temperature: 0.9,
-        maxOutputTokens: 2000,
+        maxOutputTokens: 3000,
         responseMimeType: 'application/json',
-        systemInstruction: 'You suggest museum exhibit ideas for kids. Output a JSON array of exactly 3 objects with fields: title (1-4 words), description (one sentence), year, detail (1-2 sentences, kid-friendly), wow (one surprising fact), imagePrompt (short visual description). Be creative and diverse — surprise the user with unexpected but universally recognizable topics.',
+        systemInstruction: 'You suggest museum exhibit ideas for kids. Output a JSON array of exactly 3 objects with fields: title (1-4 words), description (one sentence), year, detail (1-2 sentences, kid-friendly), wow (one surprising fact), imagePrompt (short visual description). Be creative and diverse — surprise the user with unexpected but universally recognizable topics. Keep each field concise — you MUST output all 3 ideas.',
       },
     });
 

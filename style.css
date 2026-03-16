@@ -398,11 +398,15 @@ html, body {
 .sg-past-stories { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 
 .sg-past-card {
+  position: relative;
   background: rgba(0,0,0,0.03);
   border: 1px solid rgba(0,0,0,0.06);
   padding: 12px 14px;
   border-radius: 2px;
 }
+
+.sg-past-delete { position: absolute; top: 4px; right: 4px; background: none; border: none; color: rgba(255,100,100,0.5); font-size: 16px; cursor: pointer; padding: 2px 6px; }
+.sg-past-delete:hover { color: rgba(255,100,100,0.9); }
 
 .sg-past-title { font-size: 13px; font-weight: 700; color: var(--text); }
 .sg-past-date { font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }
@@ -1002,6 +1006,14 @@ html, body {
 
 #diary-close:hover { color: var(--text); }
 
+.diary-danger-zone { display: flex; gap: 8px; margin-top: 10px; }
+.diary-danger-btn {
+  background: none; border: 1px solid rgba(255,100,100,0.3); color: rgba(255,100,100,0.6);
+  font-size: 10px; padding: 3px 8px; border-radius: 2px; cursor: pointer; font-family: 'Georgia', serif;
+  transition: all 0.15s;
+}
+.diary-danger-btn:hover { border-color: rgba(255,100,100,0.6); color: rgba(255,100,100,0.9); }
+
 .diary-day {
   margin-bottom: 32px;
 }
@@ -1175,6 +1187,10 @@ html, body {
 #pix-chat-send:hover { background: #9a7009; }
 
 /* ==================== CUSTOM SECTION ==================== */
+
+.custom-exhibit-delete { position: absolute; top: -4px; right: -4px; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,100,100,0.4); color: rgba(255,100,100,0.7); font-size: 12px; cursor: pointer; padding: 0 4px; border-radius: 2px; z-index: 5; display: none; }
+.exhibit:hover .custom-exhibit-delete { display: block; }
+.custom-exhibit-delete:hover { color: rgba(255,100,100,1); border-color: rgba(255,100,100,0.8); }
 
 .custom-section-title {
   position: absolute;

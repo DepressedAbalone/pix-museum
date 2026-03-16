@@ -128,6 +128,10 @@ function injectDiaryHTML() {
           <button id="diary-close">&times;</button>
           <h2>Your Museum Diary</h2>
           <div class="diary-subtitle">by Pix</div>
+          <div class="diary-danger-zone">
+            <button id="diary-delete-stories" class="diary-danger-btn">Delete All Stories</button>
+            <button id="diary-delete-all" class="diary-danger-btn">Delete All Data</button>
+          </div>
         </div>
         <div id="diary-content"></div>
       </div>
@@ -229,6 +233,79 @@ async function generateAndInsert(dateStr, stories, diary) {
 }
 
 // ==================== PUBLIC API ====================
+// ==================== DELETE HELPERS ====================
+async function clearAllImages() {
+  try {
+    const req = indexedDB.open('museum_images', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('images');
+    const db = await new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').clear();
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.warn('Failed to clear IndexedDB images:', e);
+  }
+}
+
+function setupDangerButtons() {
+  const deleteStoriesBtn = document.getElementById('diary-delete-stories');
+  const deleteAllBtn = document.getElementById('diary-delete-all');
+
+  let storiesClickCount = 0, allClickCount = 0;
+  let storiesTimer = null, allTimer = null;
+
+  deleteStoriesBtn?.addEventListener('click', () => {
+    storiesClickCount++;
+    if (storiesClickCount === 1) {
+      deleteStoriesBtn.textContent = 'Confirm?';
+      deleteStoriesBtn.style.color = '#ff4444';
+      storiesTimer = setTimeout(() => { storiesClickCount = 0; deleteStoriesBtn.textContent = 'Delete All Stories'; deleteStoriesBtn.style.color = ''; }, 3000);
+    } else if (storiesClickCount >= 2) {
+      clearTimeout(storiesTimer);
+      localStorage.removeItem('invention_museum_stories');
+      clearAllImages();
+      storiesClickCount = 0;
+      deleteStoriesBtn.textContent = 'Done!';
+      deleteStoriesBtn.style.color = '#4a8a5a';
+      setTimeout(() => { deleteStoriesBtn.textContent = 'Delete All Stories'; deleteStoriesBtn.style.color = ''; }, 2000);
+      renderDiary();
+    }
+  });
+
+  deleteAllBtn?.addEventListener('click', () => {
+    allClickCount++;
+    if (allClickCount === 1) {
+      deleteAllBtn.textContent = 'Confirm?';
+      deleteAllBtn.style.color = '#ff4444';
+      allTimer = setTimeout(() => { allClickCount = 0; deleteAllBtn.textContent = 'Delete All Data'; deleteAllBtn.style.color = ''; }, 3000);
+    } else if (allClickCount >= 2) {
+      clearTimeout(allTimer);
+      // Clear all localStorage keys matching the patterns
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('invention_museum') || key.startsWith('pix_memory') || key.startsWith('exhibit_gen'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+      // Clear the entire IndexedDB database
+      clearAllImages();
+      allClickCount = 0;
+      deleteAllBtn.textContent = 'Done!';
+      deleteAllBtn.style.color = '#4a8a5a';
+      setTimeout(() => { deleteAllBtn.textContent = 'Delete All Data'; deleteAllBtn.style.color = ''; }, 2000);
+      renderDiary();
+    }
+  });
+}
+
 export function initDiary() {
   injectDiaryHTML();
 
@@ -243,6 +320,8 @@ export function initDiary() {
       closeDiary();
     }
   });
+
+  setupDangerButtons();
 }
 
 export function openDiary() {

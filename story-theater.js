@@ -1,5 +1,5 @@
 import { GoogleGenAI, Modality } from '@google/genai';
-import { recordQuizAnswer, recordStoryStarted, recordStoryCompleted, recordAngleChoice, getMemorySummary } from './pix-memory.js';
+import { recordQuizAnswer, recordStoryStarted, recordStoryCompleted, recordAngleChoice, recordConversation, getMemorySummary } from './pix-memory.js';
 
 // ==================== CONFIG ====================
 const GEMINI_MODEL = 'gemini-3-flash-preview';
@@ -21,11 +21,40 @@ let isNarrating = false;
 let currentNarrationIdx = 0;
 let audioProcessor = null;
 let audioSourceNode = null;
+let micPaused = false; // gate for pausing mic sends without destroying the processor
+let _userSpeechBuffer = '';
+let _pixSpeechBuffer = '';
+
+// Send a text message to the Live API, pausing mic audio around it to avoid collisions
+function sendText(text) {
+  if (!liveSession) return;
+  micPaused = true;
+  try {
+    liveSession.sendRealtimeInput({ text });
+  } catch (e) {
+    console.error('[Narrator] sendText failed:', e.message);
+    showConnectionError('narrator');
+    return; // don't resume mic — socket is dead
+  }
+  // Resume mic after a short gap so the text send completes on the wire
+  setTimeout(() => { micPaused = false; }, 200);
+}
 
 // Story state
 let currentStory = null;
 let currentScreen = 0;
 let interactionCompleted = false;
+
+// ==================== CONNECTION ERROR NOTIFICATION ====================
+function showConnectionError(source) {
+  // Don't show duplicate notifications
+  if (document.getElementById('connection-error-banner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'connection-error-banner';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#c0392b;color:white;padding:12px 20px;text-align:center;font-family:Georgia,serif;font-size:14px;display:flex;align-items:center;justify-content:center;gap:12px;';
+  banner.innerHTML = `<span>Connection lost. Voice features may not work.</span><button onclick="location.reload()" style="background:white;color:#c0392b;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;">Refresh</button><button onclick="this.parentElement.remove()" style="background:none;border:1px solid rgba(255,255,255,0.4);color:white;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:13px;">Dismiss</button>`;
+  document.body.appendChild(banner);
+}
 
 // ==================== INIT ====================
 function initGemini() {
@@ -114,6 +143,16 @@ async function loadImage(key) {
     const req = tx.objectStore('images').get(key);
     req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => reject(req.error);
+  });
+}
+
+async function deleteImage(key) {
+  const db = await openImageDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
   });
 }
 
@@ -384,6 +423,7 @@ ${angleTypes}
 - Lead with a SPECIFIC hook — a person's name, a date, a place, a number, a surprising claim. Not vague themes.
 - Title: 3-6 words, punchy. Like a chapter title, not a headline.
 - Description: 1-2 sentences. Concrete and specific. Name names, cite facts.
+- Be concise — keep each suggestion short. You must fit all 3 within the token budget.
 
 ## Output: exactly 3 items, valid JSON array only, no markdown
 [
@@ -539,6 +579,49 @@ function playToneSweep(startFreq, endFreq, duration, type, volume) {
   osc.start(t); osc.stop(t + duration);
 }
 
+// ==================== LOADING SOUND EFFECTS ====================
+let loadingSfxInterval = null;
+
+// Angle exploration: curious, twinkling, like turning a kaleidoscope
+function startAngleSfx() {
+  stopLoadingSfx();
+  const notes = [440, 554, 659, 880, 554, 740, 494, 659];
+  let i = 0;
+  // Play first note immediately
+  playTone(notes[0], 0.3, 'sine', 0.04, 0.05);
+  loadingSfxInterval = setInterval(() => {
+    i = (i + 1) % notes.length;
+    playTone(notes[i], 0.3, 'sine', 0.04, 0.05);
+    // Soft shimmer underneath
+    if (i % 2 === 0) playNoise(0.15, 3000, 'highpass', 0.008, 0.05);
+  }, 600);
+}
+
+// Story crafting: deeper, warmer, like a forge heating up
+function startStorySfx() {
+  stopLoadingSfx();
+  const baseFreqs = [165, 196, 220, 247, 220, 196];
+  let i = 0;
+  playTone(baseFreqs[0], 0.8, 'sine', 0.05, 0.2);
+  loadingSfxInterval = setInterval(() => {
+    i = (i + 1) % baseFreqs.length;
+    playTone(baseFreqs[i], 0.8, 'sine', 0.05, 0.2);
+    // Low rumble like something being forged
+    playNoise(0.4, 200, 'lowpass', 0.015, 0.1);
+    // Occasional high harmonic — sparks
+    if (Math.random() > 0.6) {
+      setTimeout(() => playTone(baseFreqs[i] * 4, 0.15, 'sine', 0.02, 0.01), 300);
+    }
+  }, 900);
+}
+
+function stopLoadingSfx() {
+  if (loadingSfxInterval) {
+    clearInterval(loadingSfxInterval);
+    loadingSfxInterval = null;
+  }
+}
+
 const narrativeSFX = {
   dream: () => {
     // Soft ambient hum — the ancient longing
@@ -587,8 +670,11 @@ function playBeatSFX(arcBeat) {
 }
 
 // ==================== LIVE API NARRATOR ====================
-async function startNarrator(story) {
+async function startNarrator(story, prebuiltUserCtx) {
   if (!geminiAI) return;
+  micPaused = false;
+  _userSpeechBuffer = '';
+  _pixSpeechBuffer = '';
   try {
     inputAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
     outputAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
@@ -601,8 +687,8 @@ async function startNarrator(story) {
       `Screen ${i + 1} [${s.arcBeat}]: ${s.text}`
     ).join('\n');
 
-    // Build user context for Pix
-    const userCtx = buildUserContext();
+    // Use pre-built context if provided (avoids reading just-saved story as "past visit")
+    const userCtx = prebuiltUserCtx || buildUserContext();
 
     let userHistoryBlock = '';
     if (userCtx.isFirstVisit) {
@@ -656,7 +742,7 @@ ${allScreenTexts}
           audioSourceNode = inputAudioCtx.createMediaStreamSource(micStream);
           audioProcessor = inputAudioCtx.createScriptProcessor(4096, 1, 1);
           audioProcessor.onaudioprocess = (e) => {
-            if (!liveSession) return;
+            if (!liveSession || micPaused) return;
             const inputData = e.inputBuffer.getChannelData(0);
             const int16 = new Int16Array(inputData.length);
             for (let i = 0; i < inputData.length; i++) {
@@ -667,19 +753,29 @@ ${allScreenTexts}
             for (let i = 0; i < bytes.byteLength; i++) {
               binary += String.fromCharCode(bytes[i]);
             }
-            liveSession.sendRealtimeInput({ media: { data: btoa(binary), mimeType: 'audio/pcm;rate=16000' } });
+            try {
+              liveSession.sendRealtimeInput({ media: { data: btoa(binary), mimeType: 'audio/pcm;rate=16000' } });
+            } catch (e) {
+              console.error('[Narrator] Mic send failed:', e.message);
+              micPaused = true; // stop further sends — socket is dead
+            }
           };
           audioSourceNode.connect(audioProcessor);
           audioProcessor.connect(inputAudioCtx.destination);
 
-          // Auto-narrate first screen
+          // Auto-narrate the current screen (may not be screen 0 if resuming)
           setTimeout(() => {
             if (!liveSession || !currentStory) return;
-            const first = currentStory.screens?.[0];
-            if (first?.text) {
-              liveSession.sendRealtimeInput({ text: `Please narrate screen 1: ${first.text}` });
+            const startIdx = currentScreen || 0;
+            const screen = currentStory.screens?.[startIdx];
+            if (screen?.text) {
+              const isResume = startIdx > 0;
+              const prefix = isResume
+                ? `The visitor is resuming this story from screen ${startIdx + 1}. Pick up from here naturally — don't recap earlier screens. Narrate screen ${startIdx + 1}: `
+                : `Please narrate screen 1: `;
+              sendText(prefix + screen.text);
               isNarrating = true;
-              currentNarrationIdx = 0;
+              currentNarrationIdx = startIdx;
             }
           }, 0);
         },
@@ -704,6 +800,12 @@ ${allScreenTexts}
             nextStartTime += buffer.duration;
             audioSources.add(source);
           }
+          // Capture transcriptions for memory
+          const outputText = message.serverContent?.outputTranscription?.text;
+          if (outputText) _pixSpeechBuffer += outputText;
+          const inputText = message.serverContent?.inputTranscription?.text;
+          if (inputText) _userSpeechBuffer += inputText;
+
           if (message.serverContent?.interrupted) {
             isNarrating = false;
             audioSources.forEach(s => { try { s.stop(); } catch {} });
@@ -712,13 +814,31 @@ ${allScreenTexts}
           }
           if (message.serverContent?.turnComplete) {
             isNarrating = false;
+            // Record user's questions/comments during story to pix-memory
+            if (_userSpeechBuffer.trim()) {
+              const exhibit = currentStory?.title || 'unknown';
+              const exchange = [];
+              exchange.push(`User said: "${_userSpeechBuffer.trim()}"`);
+              if (_pixSpeechBuffer.trim()) exchange.push(`Pix said: "${_pixSpeechBuffer.trim()}"`);
+              recordConversation(`story narration: ${exhibit}`, exchange.join(' | '));
+            }
+            _userSpeechBuffer = '';
+            _pixSpeechBuffer = '';
           }
         },
-        onerror: (e) => console.error("Live API Error", e),
+        onerror: (e) => {
+          console.error("Live API Error", e);
+          showConnectionError('narrator');
+        },
+        onclose: (e) => {
+          console.log("[Narrator] WebSocket closed:", e?.reason || 'no reason');
+        },
       },
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } } },
+        outputAudioTranscription: {},
+        inputAudioTranscription: {},
         systemInstruction,
       }
     });
@@ -736,14 +856,11 @@ function narratePanel(panelIdx) {
   if (!screen?.text) return;
   currentNarrationIdx = panelIdx;
   isNarrating = true;
-  liveSession.sendRealtimeInput({ text: `Please narrate screen ${panelIdx + 1}: ${screen.text}` });
+  sendText(`Please narrate screen ${panelIdx + 1}: ${screen.text}`);
 }
 
 function narrateInteractionResult(resultText) {
-  if (!liveSession) return;
-  liveSession.sendRealtimeInput({
-    text: `The visitor just answered a question. ${resultText} React naturally in 1-2 sentences — be specific about their answer. If they got it right, be genuinely impressed. If they were close, acknowledge the effort. If they were way off, be kind and share why the real answer is interesting.`
-  });
+  sendText(`The visitor just answered a question. ${resultText} React naturally in 1-2 sentences — be specific about their answer. If they got it right, be genuinely impressed. If they were close, acknowledge the effort. If they were way off, be kind and share why the real answer is interesting.`);
 }
 
 function stopNarrator() {
@@ -756,6 +873,7 @@ function stopNarrator() {
     try { audioSourceNode.disconnect(); } catch {}
     audioSourceNode = null;
   }
+  micPaused = true; // prevent any in-flight sends
   if (liveSession) {
     try { liveSession.close(); } catch {}
     liveSession = null;
@@ -1129,11 +1247,7 @@ function renderScreen() {
     // Have Pix ask the interaction question aloud
     if (liveSession && screen.interaction.question) {
       setTimeout(() => {
-        if (liveSession) {
-          liveSession.sendRealtimeInput({
-            text: `Now ask the visitor this question naturally (rephrase it, don't read it robotically): "${screen.interaction.question}"`
-          });
-        }
+        sendText(`Now ask the visitor this question naturally (rephrase it, don't read it robotically): "${screen.interaction.question}"`);
       }, 2000); // delay so the screen text narration finishes first
     }
   }
@@ -1244,7 +1358,7 @@ async function openTheater(exhibitId, exhibitData, existingStory, chosenAngle, s
   if (onTheaterOpen) onTheaterOpen();
   const theater = document.getElementById('story-theater');
   theater.classList.remove('hidden');
-  document.getElementById('st-title').textContent = exhibitData.title;
+  document.getElementById('st-title').textContent = chosenAngle?.title || exhibitData.title;
 
   const container = document.getElementById('st-screen-container');
 
@@ -1252,7 +1366,7 @@ async function openTheater(exhibitId, exhibitData, existingStory, chosenAngle, s
     const isCompleted = existingStory.completed;
     currentStory = {
       exhibitId,
-      title: exhibitData.title,
+      title: existingStory.title || exhibitData.title,
       screens: existingStory.screens,
       comicImage: null,
       _recordId: existingStory.id,
@@ -1268,12 +1382,20 @@ async function openTheater(exhibitId, exhibitData, existingStory, chosenAngle, s
     return;
   }
 
+  // Reset progress bar and screen state for the new story
+  currentStory = null;
+  currentScreen = 0;
+  document.getElementById('st-progress').innerHTML = '';
+
   // Generate new story — wait for BOTH text and image before showing
   container.innerHTML = `<div class="st-loading">
     <div class="st-loading-spinner"></div>
     <div class="st-loading-text">Crafting your story...</div>
     <div class="st-loading-sub" id="st-loading-status">Searching for real facts about ${escapeHtml(exhibitData.title)}</div>
   </div>`;
+
+  // Start story crafting SFX
+  startStorySfx();
 
   try {
     // Get past stories for dedup
@@ -1314,11 +1436,14 @@ async function openTheater(exhibitId, exhibitData, existingStory, chosenAngle, s
       }
     }
 
+    // Stop loading SFX
+    stopLoadingSfx();
+
     // NOW show everything together
     const recordId = `${exhibitId}-${Date.now()}`;
     currentStory = {
       exhibitId,
-      title: exhibitData.title,
+      title: chosenAngle?.title || exhibitData.title,
       screens: storyContent.screens,
       comicImage,
       _recordId: recordId,
@@ -1327,6 +1452,10 @@ async function openTheater(exhibitId, exhibitData, existingStory, chosenAngle, s
     };
     currentScreen = 0;
     interactionCompleted = false;
+
+    // Capture user context BEFORE saving story — so narrator doesn't think
+    // this brand-new story is a "past visit"
+    const userCtxSnapshot = buildUserContext();
 
     // Save comic image to IndexedDB immediately (not just on completion)
     // so re-reads of partial stories still have the image
@@ -1340,10 +1469,11 @@ async function openTheater(exhibitId, exhibitData, existingStory, chosenAngle, s
 
     renderScreen();
 
-    // Start narrator after content is visible
-    if (GEMINI_KEY && geminiAI) startNarrator(currentStory);
+    // Start narrator after content is visible — pass pre-save context
+    if (GEMINI_KEY && geminiAI) startNarrator(currentStory, userCtxSnapshot);
 
   } catch (err) {
+    stopLoadingSfx();
     container.innerHTML = `<div class="st-error">
       <div>Failed to generate story</div>
       <div class="st-error-detail">${escapeHtml(err.message)}</div>
@@ -1389,6 +1519,7 @@ function showGateway(exhibitId, exhibitData, sectionId) {
           const progress = s.completed ? 'Completed' : `${s.progress || 0}/${s.screens?.length || 6} chapters`;
           return `
           <div class="sg-past-card" data-idx="${i}">
+            <button class="sg-past-delete" data-idx="${i}" title="Delete">&times;</button>
             <div class="sg-past-title">${escapeHtml(s.title || exhibitData.title)}</div>
             <div class="sg-past-date">${new Date(s.createdAt).toLocaleDateString()} · ${progress}</div>
             <div class="sg-past-summary">${escapeHtml((s.summary || '').slice(0, 100))}...</div>
@@ -1412,23 +1543,46 @@ function showGateway(exhibitId, exhibitData, sectionId) {
       });
     });
 
+    // Delete story handlers
+    content.querySelectorAll('.sg-past-delete').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.idx);
+        const data = loadStoryData();
+        const exhibit = data.exhibits[exhibitId];
+        if (exhibit?.stories) {
+          const removed = exhibit.stories.splice(idx, 1)[0];
+          // Delete comic image from IndexedDB
+          if (removed?.id) { deleteImage(removed.id).catch(() => {}); }
+          saveStoryData(data);
+          // Re-render gateway
+          showGateway(exhibitId, exhibitData, sectionId);
+        }
+      });
+    });
+
     // New story handler — generate 3 angles, let user choose
+    let hasGeneratedAngles = false;
     document.getElementById('sg-new-story').addEventListener('click', async () => {
       const btn = document.getElementById('sg-new-story');
       btn.disabled = true;
       btn.textContent = 'Finding new angles...';
 
+      // Start exploration SFX
+      startAngleSfx();
+
       try {
         const angles = await generateAngles(exhibitId, exhibitData, pastStories, sectionId);
+        stopLoadingSfx();
         const angleList = Array.isArray(angles) ? angles.filter(a => a && a.title) : [];
 
         if (angleList.length === 0) {
-          // No valid angles — show error, don't auto-open theater
           btn.disabled = false;
-          btn.textContent = 'Explore More';
-          btn.style.display = '';
+          btn.textContent = hasGeneratedAngles ? 'One More Try' : 'Explore More';
           return;
         }
+
+        hasGeneratedAngles = true;
 
         // Remove any previously inserted angles
         content.querySelectorAll('.sg-angles').forEach(el => el.remove());
@@ -1443,11 +1597,17 @@ function showGateway(exhibitId, exhibitData, sectionId) {
             </button>
           `).join('')}
         </div>`;
-        btn.style.display = 'none';
-        btn.insertAdjacentHTML('afterend', anglesHTML);
+
+        // Keep button visible but rename it
+        btn.disabled = false;
+        btn.textContent = 'One More Try';
+
+        // Insert angles BEFORE the button
+        btn.insertAdjacentHTML('beforebegin', anglesHTML);
 
         content.querySelectorAll('.sg-angle-btn').forEach(abtn => {
           abtn.addEventListener('click', () => {
+            stopLoadingSfx();
             const idx = parseInt(abtn.dataset.idx);
             const angle = angleList[idx];
             recordAngleChoice(exhibitData.title, angle);
@@ -1457,10 +1617,9 @@ function showGateway(exhibitId, exhibitData, sectionId) {
         });
       } catch (err) {
         console.warn('Angle generation failed:', err);
-        // Don't auto-open theater — just re-enable the button
+        stopLoadingSfx();
         btn.disabled = false;
-        btn.textContent = 'Explore More';
-        btn.style.display = '';
+        btn.textContent = hasGeneratedAngles ? 'One More Try' : 'Explore More';
       }
     });
 

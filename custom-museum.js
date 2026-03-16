@@ -78,6 +78,36 @@ function saveCustomData(data) {
 
 let customData = loadCustomData();
 
+// ==================== IndexedDB for custom exhibit images ====================
+function openCustomImageDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('museum_images', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('images');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveCustomImage(key, dataUrl) {
+  const db = await openCustomImageDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').put(dataUrl, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadCustomImage(key) {
+  const db = await openCustomImageDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('images', 'readonly');
+    const req = tx.objectStore('images').get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 // ==================== PIX CHARACTER (Hoopa-inspired floating blue creature) ====================
 // Rugby-shaped head, big cute eyes, cartoon-poop swirl on top, tiny stubby arms, NO legs (floats).
 // ~30x35 pixel grid (90x105 real pixels at P=3)
@@ -1144,11 +1174,12 @@ async function generateExhibitImage(exhibitData) {
   if (!ai) return null;
   const subject = exhibitData.imagePrompt || exhibitData.title;
 
-  const prompt = `Generate an image of "${subject}" for a museum exhibit.
-The image should be a clear, detailed illustration on a pure white background (#FFFFFF).
-Style: colorful, slightly stylized illustration suitable for a children's museum.
-The subject should be centered and take up most of the frame.
-IMPORTANT: The background MUST be pure white so it can be cleanly removed.`;
+  const prompt = `Generate a pixel art illustration of "${subject}".
+Style: pixel art with visible individual pixels, limited color palette, retro charm. Think classic 16-bit or 32-bit game art.
+The subject should be centered, clear, and instantly recognizable.
+Use warm, vibrant colors with good contrast.
+The background MUST be pure white (#FFFFFF) so it can be cleanly removed.
+IMPORTANT: This must look like genuine pixel art — blocky pixels, not a smooth illustration with a pixel filter.`;
 
   try {
     const result = await ai.models.generateContent({
@@ -1256,12 +1287,18 @@ async function generateExhibit(sectionId, exhibitData, messagesDiv) {
     wow: exhibitData.wow || '',
     imagePrompt: exhibitData.imagePrompt || '',
     drawerCode: null,
-    imageData: imageData,
+    imageData: null,
+    hasImage: !!imageData,
     x: baseX,
     y: baseY,
     gw: 80,
     gh: 60,
   };
+
+  // Save image to IndexedDB (not localStorage) to avoid quota issues
+  if (imageData) {
+    saveCustomImage(exhibitId, imageData).catch(e => console.warn('Failed to save exhibit image to IndexedDB:', e));
+  }
 
   sec.exhibits.push(newExhibit);
   saveCustomData(customData);
@@ -1587,20 +1624,13 @@ export function renderCustomSections(museumCanvas, bgCanvas) {
       bgCtx.fillRect(fx, FLOOR_Y, 1, CANVAS_H - FLOOR_Y);
     }
 
-    // Section title on wall
-    bgCtx.save();
-    bgCtx.font = '700 28px Georgia, serif';
-    bgCtx.fillStyle = 'rgba(0,0,0,0.12)';
-    bgCtx.letterSpacing = '8px';
-    bgCtx.textAlign = 'left';
-    bgCtx.fillText(sec.title.toUpperCase(), sx + 40, 45);
-    bgCtx.restore();
-
     // --- Section title as DOM element ---
+    const sectionWidth = sec.renderWidth;
     const titleEl = document.createElement('div');
     titleEl.className = 'section-title custom-section-el';
-    titleEl.style.left = (sx + 40) + 'px';
-    titleEl.style.top = '55px';
+    titleEl.style.left = (sx + sectionWidth / 2) + 'px';
+    titleEl.style.top = '12px';
+    titleEl.style.transform = 'translateX(-50%)';
     titleEl.textContent = sec.title.toUpperCase();
     museumCanvas.appendChild(titleEl);
 
@@ -1625,16 +1655,24 @@ function renderCustomExhibit(museumCanvas, section, exhibit, sectionX) {
   const artDiv = document.createElement('div');
   artDiv.className = 'exhibit-art';
 
-  if (exhibit.imageData) {
-    // Image-based exhibit
+  if (exhibit.imageData || exhibit.hasImage) {
+    // Image-based exhibit — load from IndexedDB asynchronously
     const img = document.createElement('img');
-    img.src = exhibit.imageData;
     img.style.width = (exhibit.gw * P) + 'px';
     img.style.height = (exhibit.gh * P) + 'px';
     img.style.imageRendering = 'auto';
     img.style.objectFit = 'contain';
     img.draggable = false;
     img.alt = exhibit.title;
+    if (exhibit.imageData) {
+      // Legacy: imageData still inline (old data)
+      img.src = exhibit.imageData;
+    } else {
+      // Load from IndexedDB
+      loadCustomImage(exhibit.id).then(dataUrl => {
+        if (dataUrl) img.src = dataUrl;
+      }).catch(() => {});
+    }
     artDiv.appendChild(img);
   } else if (exhibit.drawerCode) {
     // Legacy drawer code support
@@ -1668,6 +1706,17 @@ function renderCustomExhibit(museumCanvas, section, exhibit, sectionX) {
 
   el.appendChild(artDiv);
 
+  // Delete button
+  const delBtn = document.createElement('button');
+  delBtn.className = 'custom-exhibit-delete';
+  delBtn.textContent = '\u00d7';
+  delBtn.title = 'Delete exhibit';
+  delBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    deleteCustomExhibit(section.id, exhibit.id);
+  });
+  el.appendChild(delBtn);
+
   // Shadow
   const shadow = document.createElement('div');
   shadow.className = 'exhibit-shadow';
@@ -1691,6 +1740,28 @@ function renderCustomExhibit(museumCanvas, section, exhibit, sectionX) {
   setupDrag(el, section.id, exhibit.id, sectionX);
 
   customExhibitElements.push({ el, sectionId: section.id, exhibitId: exhibit.id });
+}
+
+async function deleteCustomExhibit(sectionId, exhibitId) {
+  const sec = customData.sections.find(s => s.id === sectionId);
+  if (!sec) return;
+  sec.exhibits = sec.exhibits.filter(e => e.id !== exhibitId);
+  saveCustomData(customData);
+
+  // Delete image from IndexedDB
+  try {
+    const db = await openCustomImageDB();
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').delete(exhibitId);
+  } catch (e) { /* ignore */ }
+
+  // Re-render custom sections
+  renderAllCustomContent();
+
+  // Update canvas width
+  if (_callbacks?.onExhibitCreated) {
+    _callbacks.onExhibitCreated(sectionId, null);
+  }
 }
 
 function drawPlaceholderExhibit(ctx, exhibit) {

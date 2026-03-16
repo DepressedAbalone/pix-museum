@@ -396,6 +396,23 @@ async function init() {
       }
       requestAnimationFrame(animatePan);
     },
+    panToEnd: () => {
+      // Pan to the area right after the last built-in section (custom exhibits area)
+      const targetX = -(BASE_CANVAS_W - window.innerWidth / 2);
+      const targetY = -(SECTION_HEIGHT / 2 - window.innerHeight / 2);
+      const startX = panX, startY = panY;
+      const duration = 1200;
+      const start = performance.now();
+      function animatePan(now) {
+        const t = Math.min(1, (now - start) / duration);
+        const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        panX = startX + (targetX - startX) * ease;
+        panY = startY + (targetY - startY) * ease;
+        applyPan();
+        if (t < 1) requestAnimationFrame(animatePan);
+      }
+      requestAnimationFrame(animatePan);
+    },
     showPixCompanion: () => showPixVisualOnly(),
     hidePixCompanion: () => hidePixVisualOnly(),
     setPixState: (state) => setPixVisualState(state),
