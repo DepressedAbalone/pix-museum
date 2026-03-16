@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>The Pix Museum</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="museum-world">
+    <!-- Background layer: museum architecture (floor, walls, archways) -->
+    <canvas id="museum-bg"></canvas>
+    <!-- Exhibits layer -->
+    <div id="museum-canvas"></div>
+  </div>
+
+  <!-- Minimap -->
+  <div id="minimap">
+    <div id="minimap-dots"></div>
+    <div id="minimap-viewport"></div>
+  </div>
+
+  <!-- Story Gateway Overlay -->
+  <div id="story-gateway" class="hidden">
+    <div id="story-gateway-card">
+      <button id="story-gateway-close">&times;</button>
+      <div id="story-gateway-content"></div>
+    </div>
+  </div>
+
+  <!-- Story Theater (full-screen) -->
+  <div id="story-theater" class="hidden">
+    <div id="story-theater-inner">
+      <div class="st-progress" id="st-progress"></div>
+      <div class="st-header">
+        <button class="st-close" id="st-close">&times;</button>
+        <span class="st-title" id="st-title"></span>
+        <span class="st-screen-num" id="st-screen-num"></span>
+      </div>
+      <div class="st-screen-container" id="st-screen-container"></div>
+    </div>
+  </div>
+
+
+  <!-- Navigation hint -->
+  <div id="nav-hint">
+    <span>Drag to explore the museum</span>
+  </div>
+
+  <!-- Museum title (fixed) -->
+  <div id="gallery-title">
+    <h1>The Pix Museum</h1>
+  </div>
+
+  <!-- Top-right buttons -->
+  <div id="museum-nav">
+    <button id="pix-toggle" title="Talk to Pix">
+      <canvas id="pix-toggle-icon" width="36" height="36"></canvas>
+    </button>
+    <button id="gen-toggle" title="Exhibit Generator">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+    <button id="diary-btn" title="Your Museum Diary">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="13" y2="11"/></svg>
+    </button>
+  </div>
+
+  <!-- Pix Companion Overlay -->
+  <div id="pix-overlay" class="hidden">
+    <canvas id="pix-canvas"></canvas>
+    <div id="pix-speech-bubble" class="hidden">
+      <div id="pix-bubble-text"></div>
+    </div>
+  </div>
+
+  <!-- Pix Chat Panel (for custom sections) -->
+  <div id="pix-chat" class="hidden">
+    <div class="pix-chat-header">
+      <span class="pix-chat-name">Pix</span>
+      <button id="pix-chat-close">&times;</button>
+    </div>
+    <div id="pix-chat-messages"></div>
+    <div class="pix-chat-input-row">
+      <input id="pix-chat-input" type="text" placeholder="Talk to Pix...">
+      <button id="pix-chat-send">→</button>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
