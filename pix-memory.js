@@ -591,7 +591,7 @@ function showMemoryDebug() {
 export function initPixMemory() {
   memory = loadMemory();
   recordVisit();
-  addMemoryDebugButton();
+  // addMemoryDebugButton();
 
   // Load user name from onboarding if available
   try {

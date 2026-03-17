@@ -933,23 +933,23 @@ export function initOnboarding(callbacks) {
   tourCallbacks = callbacks || null;
   injectStyles();
 
-  if (!document.getElementById('onboarding-replay')) {
-    const btn = document.createElement('button');
-    btn.id = 'onboarding-replay';
-    btn.textContent = 'REPLAY ONBOARDING';
-    btn.addEventListener('click', () => {
-      const existing = document.getElementById('onboarding-overlay'); if (existing) existing.remove();
-      const tourEl = document.getElementById('tour-text-overlay'); if (tourEl) tourEl.remove();
-      onboardingActive = false;
-      onboardingPhase = 'idle';
-      stopLive();
-      resetTextDisplay();
-      localStorage.removeItem(ONBOARDING_KEY);
-      localStorage.removeItem(USER_KEY);
-      setTimeout(() => runOnboarding(), 200);
-    });
-    document.body.appendChild(btn);
-  }
+  // if (!document.getElementById('onboarding-replay')) {
+  //   const btn = document.createElement('button');
+  //   btn.id = 'onboarding-replay';
+  //   btn.textContent = 'REPLAY ONBOARDING';
+  //   btn.addEventListener('click', () => {
+  //     const existing = document.getElementById('onboarding-overlay'); if (existing) existing.remove();
+  //     const tourEl = document.getElementById('tour-text-overlay'); if (tourEl) tourEl.remove();
+  //     onboardingActive = false;
+  //     onboardingPhase = 'idle';
+  //     stopLive();
+  //     resetTextDisplay();
+  //     localStorage.removeItem(ONBOARDING_KEY);
+  //     localStorage.removeItem(USER_KEY);
+  //     setTimeout(() => runOnboarding(), 200);
+  //   });
+  //   document.body.appendChild(btn);
+  // }
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {

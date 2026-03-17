@@ -3,7 +3,7 @@ import { initDiary } from './diary.js';
 import { initCustomMuseum, renderCustomSections, getCustomSectionWidth } from './custom-museum.js';
 import { initPixCompanion, showPixVisualOnly, hidePixVisualOnly, setPixVisualState } from './pix-companion.js';
 import { initExhibitGenerator } from './exhibit-generator.js';
-import { initOnboarding } from './onboarding.js';
+import { initOnboarding, shouldShowOnboarding } from './onboarding.js';
 import { initPixMemory } from './pix-memory.js';
 
 // ==================== IMAGE SCALE ====================
@@ -170,11 +170,16 @@ const exhibitMeta = {
 };
 
 // ==================== SFX (Web Audio API — play on hover) ====================
-const sfxCtx = new (window.AudioContext || window.webkitAudioContext)();
-function noiseBuffer(d){const sr=sfxCtx.sampleRate,b=sfxCtx.createBuffer(1,sr*d,sr),c=b.getChannelData(0);for(let i=0;i<c.length;i++)c[i]=Math.random()*2-1;return b}
-function playNoise(d,f,ft,v,a){const s=sfxCtx.createBufferSource();s.buffer=noiseBuffer(d);const fl=sfxCtx.createBiquadFilter();fl.type=ft||'lowpass';fl.frequency.value=f||800;const g=sfxCtx.createGain();const t=sfxCtx.currentTime;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v||0.15,t+(a||0.01));g.gain.exponentialRampToValueAtTime(0.001,t+d);s.connect(fl);fl.connect(g);g.connect(sfxCtx.destination);s.start(t);s.stop(t+d)}
-function playTone(f,d,ty,v,a){const o=sfxCtx.createOscillator();o.type=ty||'sine';o.frequency.value=f;const g=sfxCtx.createGain();const t=sfxCtx.currentTime;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v||0.1,t+(a||0.01));g.gain.exponentialRampToValueAtTime(0.001,t+d);o.connect(g);g.connect(sfxCtx.destination);o.start(t);o.stop(t+d)}
-function playToneSweep(sf,ef,d,ty,v){const o=sfxCtx.createOscillator();o.type=ty||'sine';const t=sfxCtx.currentTime;o.frequency.setValueAtTime(sf,t);o.frequency.exponentialRampToValueAtTime(ef,t+d);const g=sfxCtx.createGain();g.gain.setValueAtTime(v||0.1,t);g.gain.exponentialRampToValueAtTime(0.001,t+d);o.connect(g);g.connect(sfxCtx.destination);o.start(t);o.stop(t+d)}
+let sfxCtx = null;
+function ensureSfxCtx() {
+  if (!sfxCtx) sfxCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (sfxCtx.state === 'suspended') sfxCtx.resume();
+  return sfxCtx;
+}
+function noiseBuffer(d){ensureSfxCtx();const sr=sfxCtx.sampleRate,b=sfxCtx.createBuffer(1,sr*d,sr),c=b.getChannelData(0);for(let i=0;i<c.length;i++)c[i]=Math.random()*2-1;return b}
+function playNoise(d,f,ft,v,a){ensureSfxCtx();const s=sfxCtx.createBufferSource();s.buffer=noiseBuffer(d);const fl=sfxCtx.createBiquadFilter();fl.type=ft||'lowpass';fl.frequency.value=f||800;const g=sfxCtx.createGain();const t=sfxCtx.currentTime;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v||0.15,t+(a||0.01));g.gain.exponentialRampToValueAtTime(0.001,t+d);s.connect(fl);fl.connect(g);g.connect(sfxCtx.destination);s.start(t);s.stop(t+d)}
+function playTone(f,d,ty,v,a){ensureSfxCtx();const o=sfxCtx.createOscillator();o.type=ty||'sine';o.frequency.value=f;const g=sfxCtx.createGain();const t=sfxCtx.currentTime;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v||0.1,t+(a||0.01));g.gain.exponentialRampToValueAtTime(0.001,t+d);o.connect(g);g.connect(sfxCtx.destination);o.start(t);o.stop(t+d)}
+function playToneSweep(sf,ef,d,ty,v){ensureSfxCtx();const o=sfxCtx.createOscillator();o.type=ty||'sine';const t=sfxCtx.currentTime;o.frequency.setValueAtTime(sf,t);o.frequency.exponentialRampToValueAtTime(ef,t+d);const g=sfxCtx.createGain();g.gain.setValueAtTime(v||0.1,t);g.gain.exponentialRampToValueAtTime(0.001,t+d);o.connect(g);g.connect(sfxCtx.destination);o.start(t);o.stop(t+d)}
 
 const exhibitSFX = {
   'the-big-bang':()=>{playNoise(1.5,200,'lowpass',0.25,0.005);playTone(30,1.5,'sine',0.15,0.01)},
@@ -244,7 +249,7 @@ const exhibitSFX = {
   'tesla-roadster':()=>{playToneSweep(150,600,0.8,'sine',0.05);playNoise(0.6,1500,'bandpass',0.03,0.2)},
 };
 
-function playExhibitSFX(id){if(sfxCtx.state==='suspended')sfxCtx.resume();if(exhibitSFX[id])exhibitSFX[id]()}
+function playExhibitSFX(id){ensureSfxCtx();if(exhibitSFX[id])exhibitSFX[id]()}
 
 // ==================== LAYOUT ====================
 const SECTION_HEIGHT = 950;
@@ -259,15 +264,19 @@ BASE_CANVAS_W = totalW;
 CANVAS_W = BASE_CANVAS_W;
 
 const allExhibitImages = {};
-async function loadAllImages() {
-  const promises = [];
-  for (const section of sections) {
-    for (const ex of section.exhibits) {
-      const img = new Image();
-      img.src = `${section.folder}/${ex.file}`;
-      promises.push(new Promise(r => { img.onload = () => { allExhibitImages[ex.id] = { img, w: img.naturalWidth * S, h: img.naturalHeight * S }; r(); }; img.onerror = r; }));
-    }
-  }
+async function loadAllImages(onProgress) {
+  const allExhibits = sections.flatMap(sec => sec.exhibits.map(ex => ({ sec, ex })));
+  const total = allExhibits.length;
+  let loaded = 0;
+  const promises = allExhibits.map(({ sec, ex }) => {
+    const img = new Image();
+    // Use WebP for smaller file size (~90% reduction)
+    img.src = `${sec.folder}/${ex.file.replace('.png', '.webp')}`;
+    return new Promise(r => {
+      img.onload = () => { allExhibitImages[ex.id] = { img, w: img.naturalWidth * S, h: img.naturalHeight * S }; loaded++; if (onProgress) onProgress(loaded, total); r(); };
+      img.onerror = () => { loaded++; if (onProgress) onProgress(loaded, total); r(); };
+    });
+  });
   await Promise.all(promises);
 }
 
@@ -364,25 +373,17 @@ function scrollToExhibit(id) { const item = layout.find(l => l.id === id); if (!
 
 // ==================== INIT ====================
 async function init() {
-  await loadAllImages();
-  CANVAS_W = BASE_CANVAS_W + getCustomSectionWidth();
-  renderMuseumBg(); renderExhibits(); renderMinimap(); applyPan();
+  let imagesLoaded = false;
+  let userTapped = false;
+  const splash = document.getElementById('splash');
+  const splashSub = document.getElementById('splash-sub');
 
-  initStoryTheater(exhibitMeta, { scrollToExhibit, onTheaterClose: () => {}, onTheaterOpen: () => {} });
-  initDiary();
-  initCustomMuseum({ onSectionCreated: () => { CANVAS_W = BASE_CANVAS_W + getCustomSectionWidth(); renderMuseumBg(); renderCustomSections(museumCanvas, bgCanvas); applyPan(); renderMinimap(); }, onExhibitCreated: () => { CANVAS_W = BASE_CANVAS_W + getCustomSectionWidth(); applyPan(); renderMinimap(); }, getMuseumWidth: () => BASE_CANVAS_W });
-  CANVAS_W = BASE_CANVAS_W + getCustomSectionWidth();
-  renderCustomSections(museumCanvas, bgCanvas); applyPan();
-  initPixCompanion({ exhibitMeta, getViewportCenter: () => ({ x: -panX + window.innerWidth / 2, y: -panY + window.innerHeight / 2 }), onExhibitGenRequested: null });
-  initExhibitGenerator(exhibitMeta);
-  initPixMemory();
-  initOnboarding({
+  const startOnboarding = () => initOnboarding({
     panToSection: (sectionId) => {
       const sec = sections.find(s => s.id === sectionId);
       if (!sec) return;
       const targetX = -(sec._x + sec.width / 2 - window.innerWidth / 2);
       const targetY = -(SECTION_HEIGHT / 2 - window.innerHeight / 2);
-      // Smooth animated pan
       const startX = panX, startY = panY;
       const duration = 1200;
       const start = performance.now();
@@ -397,7 +398,6 @@ async function init() {
       requestAnimationFrame(animatePan);
     },
     panToEnd: () => {
-      // Pan to the area right after the last built-in section (custom exhibits area)
       const targetX = -(BASE_CANVAS_W - window.innerWidth / 2);
       const targetY = -(SECTION_HEIGHT / 2 - window.innerHeight / 2);
       const startX = panX, startY = panY;
@@ -417,5 +417,47 @@ async function init() {
     hidePixCompanion: () => hidePixVisualOnly(),
     setPixState: (state) => setPixVisualState(state),
   });
+
+  // Dismiss splash when both images loaded AND user tapped
+  function tryDismissSplash() {
+    if (!imagesLoaded || !userTapped || !splash) return;
+    splash.remove();
+    startOnboarding();
+  }
+
+  // Listen for user tap on splash
+  if (splash) {
+    splash.addEventListener('click', () => {
+      userTapped = true;
+      if (!imagesLoaded && splashSub) splashSub.textContent = 'Almost ready...';
+      tryDismissSplash();
+    });
+  }
+
+  // Load images (shows progress on splash)
+  await loadAllImages((loaded, total) => {
+    if (splashSub && !userTapped) {
+      const pct = Math.round((loaded / total) * 100);
+      splashSub.textContent = `Loading... ${pct}%`;
+    }
+  });
+  imagesLoaded = true;
+  if (splashSub && !userTapped) splashSub.textContent = 'Tap anywhere to enter';
+
+  // Render museum behind splash so it's ready when splash goes away
+  CANVAS_W = BASE_CANVAS_W + getCustomSectionWidth();
+  renderMuseumBg(); renderExhibits(); renderMinimap(); applyPan();
+
+  initStoryTheater(exhibitMeta, { scrollToExhibit, onTheaterClose: () => {}, onTheaterOpen: () => {} });
+  initDiary();
+  initCustomMuseum({ onSectionCreated: () => { CANVAS_W = BASE_CANVAS_W + getCustomSectionWidth(); renderMuseumBg(); renderCustomSections(museumCanvas, bgCanvas); applyPan(); renderMinimap(); }, onExhibitCreated: () => { CANVAS_W = BASE_CANVAS_W + getCustomSectionWidth(); applyPan(); renderMinimap(); }, getMuseumWidth: () => BASE_CANVAS_W });
+  CANVAS_W = BASE_CANVAS_W + getCustomSectionWidth();
+  renderCustomSections(museumCanvas, bgCanvas); applyPan();
+  initPixCompanion({ exhibitMeta, getViewportCenter: () => ({ x: -panX + window.innerWidth / 2, y: -panY + window.innerHeight / 2 }), onExhibitGenRequested: null });
+  initExhibitGenerator(exhibitMeta);
+  initPixMemory();
+
+  // If user already tapped while loading, dismiss now
+  tryDismissSplash();
 }
 init();
